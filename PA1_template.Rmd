@@ -7,19 +7,100 @@ output:
 
 
 ## Loading and preprocessing the data
-
+```{r warning=FALSE}    
+library(ggplot2)
+  
+# Load data from csv file
+activity_data <- read.csv("activity.csv")
+#Strip out NAs
+noNA_data <- activity_data[complete.cases(activity_data[,]),]
+#convert to date
+noNA_data$date <- as.Date(as.character(noNA_data$date),"%Y-%m-%d")
+```
 
 
 ## What is mean total number of steps taken per day?
+```{r}
+agg_noNA_data <- aggregate(noNA_data$steps, by=list(date=noNA_data$date), FUN=sum)
+names(agg_noNA_data)[2]<-"steps"
+
+#plot
+qplot(date,steps,data=agg_noNA_data,geom = "bar",stat="identity",main="Total Steps Per Day")
+
+#mean & median
+noNA_mean_median <- aggregate(noNA_data$steps, by=list(date=noNA_data$date), FUN=mean)
+names(noNA_mean_median)[2]<-"mean_steps"
+noNA_median_steps <- aggregate(noNA_data$steps, by=list(date=noNA_data$date), FUN=median)
+noNA_mean_median <- merge(noNA_mean_median, noNA_median_steps, by = c("date"), all.x = TRUE)
+names(noNA_mean_median)[3]<-"median_steps"
+#Show values
+noNA_mean_median
+```
 
 
 
 ## What is the average daily activity pattern?
+```{r}
+intervalAgg <- aggregate(noNA_data$steps, by=list(date=noNA_data$interval), FUN=mean)
+names(intervalAgg)[1]<-"interval"
+names(intervalAgg)[2]<-"steps"
+ts <- ts(intervalAgg$steps,frequency=24*12)
+plot(intervalAgg$interval,ts,type="l",xlab="Interval",ylab="Mean Steps",main="Average Number Of Steps Taken")
 
-
+maxSteps <- max(intervalAgg$steps)
+maxstepinterval <- intervalAgg[which(intervalAgg$steps == maxSteps),1] 
+```
+The 5-minute interval that contains `r maxSteps`, which is the maximum number of steps, is interval `r maxstepinterval`
 
 ## Imputing missing values
 
+My strategy is to calculate the mean for each 5 minute interval and apply that to NA values.
+
+```{r}
+# Load data 
+all_activity_data <- activity_data
+
+#use mean calulated in intervalAgg to replace NAs
+modifiedMeans <- merge(all_activity_data, intervalAgg, by = c("interval"), all.x = TRUE)
+modifiedMeans <- transform(modifiedMeans, steps = ifelse(is.na(steps.x), steps.y, steps.x), steps.x = NULL, steps.y = NULL)
+
+#convert to date
+modifiedMeans$date <- as.Date(as.character(modifiedMeans$date),"%Y-%m-%d")
+
+#plot
+qplot(date,steps,data=modifiedMeans,geom = "bar",stat="identity",main="Total number of steps taken each day after missing values were imputed")
+
+#mean & median
+mod_mean <- aggregate(modifiedMeans$steps, by=list(date=modifiedMeans$date), FUN=mean)
+names(mod_mean)[2]<-"mean_steps"
+mod_median <- aggregate(modifiedMeans$steps, by=list(date=modifiedMeans$date), FUN=median)
+names(mod_median)[2]<-"median_steps"
+
+mod_mean_median <- aggregate(modifiedMeans$steps, by=list(date=modifiedMeans$date), FUN=mean)
+names(mod_mean_median)[2]<-"mean_steps"
+mod_median_steps <- aggregate(modifiedMeans$steps, by=list(date=modifiedMeans$date), FUN=median)
+mod_mean_median <- merge(mod_mean_median, mod_median_steps, by = c("date"), all.x = TRUE)
+names(mod_mean_median)[3]<-"median_steps"
+
+#Show values
+mod_mean_median
+```
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+```{r}
+#Work out whether date is weekday or weekend 
+modifiedMeans$weekdays <- weekdays(modifiedMeans$date)
+modifiedMeans <- transform(modifiedMeans, weekdays = ifelse(weekdays %in% c("Saturday","Sunday"), "weekend", "weekday"))
+modifiedMeans$weekdays <- factor(modifiedMeans$weekdays)
+
+tsWeekday <- ts(modifiedMeans[which(modifiedMeans$weekdays == "weekday"),3],frequency=24*12)
+tsWeekend <- ts(modifiedMeans[which(modifiedMeans$weekdays == "weekend"),3],frequency=24*12)
+
+par(mfrow = c(2, 1),mar = c(2,4,1,1))
+plot(modifiedMeans[which(modifiedMeans$weekdays == "weekday"),1],tsWeekday,type="l",xlab="Interval",ylab="Mean Steps",main="Weekday",col=3)
+par(mar = c(2,4,1,1))
+plot(modifiedMeans[which(modifiedMeans$weekdays == "weekend"),1],tsWeekend,type="l",xlab="Interval",ylab="Mean Steps",main="Weekend",col=2)
+
+
+```
